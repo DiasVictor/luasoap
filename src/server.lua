@@ -7,7 +7,7 @@ local next, type, tostring, pcall, unpack, pairs, ipairs = next, type, tostring,
 local error, assert = error, assert
 local table = require"table"
 local string = require"string"
-local cgilua = cgilua
+local cgilua = cgilua or require"cgilua"
 local soap = require"soap"
 
 
@@ -383,9 +383,9 @@ end
 
 ---------------------------------------------------------------------
 return {
-	_COPYRIGHT = "Copyright (C) 2004-2013 Kepler Project",
+	_COPYRIGHT = "Copyright (C) 2004-2015 Kepler Project",
 	_DESCRIPTION = "LuaSOAP provides a very simple API that convert Lua tables to and from XML documents",
-	_VERSION = "LuaSOAP 3.0 service helping functions",
+	_VERSION = "LuaSOAP 4.0 service helping functions",
 
 	builderrorenvelope = builderrorenvelope,
 	export = export,

@@ -1,4 +1,4 @@
-------------------------------------------------------------------------------
+---------------------------'---------------------------------------------------
 -- LuaSOAP support to WSDL semi-automatic generation.
 -- See Copyright Notice in license.html
 ------------------------------------------------------------------------------
@@ -75,11 +75,11 @@ methods = {
 			attr = { name = "GetQuote", parameterOrder = "??" },
 			{
 				tag = "wsdl:input",
-				attr = { message = "GetQuoteSoapIn" },
+				attr = { message = "tns:GetQuoteSoapIn" },
 			},
 			{
 				tag = "wsdl:output",
-				attr = { message = "GetQuoteSoapOut" },
+				attr = { message = "tns:GetQuoteSoapOut" },
 			},
 		},
 	},
@@ -116,6 +116,7 @@ end
 --=---------------------------------------------------------------------------
 -- wsdl:message template
 -- it should be cleaned each time it is used to eliminate old values.
+--TODO Clean it 
 local tmpl = {
 	tag = "wsdl:message",
 	attr = { name = "to be cleaned and refilled" },
@@ -131,19 +132,26 @@ local tmpl = {
 -- @param name String with type of message ("request" or "response").
 -- @return String with a <wsdl:message>.
 
-local function gen_message (elem, name)
-	if elem.element then
-		tmpl.element = elem.element
-		tmpl.type = nil -- cleans the other attribute (it could store an old value)
-		-- pode ter os atributos type E element no mesmo <wsdl:part ...> ???
-	elseif elem.type then
-		tmpl.type = elem.type
-		tmpl.element = nil -- cleans the other attribute (it could store an old value)
-		-- pode ter os atributos type E element no mesmo <wsdl:part ...> ???
-	else
-		error ("Incomplete description: "..name.." parameters might have an 'element' or a 'type' attribute")
+local function gen_message (elem, method_name)
+	local message = {}	
+	message.tag = "wsdl:message"
+	message.attr[1].name = assert (elem.name , method_name.."Message MUST have a name!")
+		
+	while elem[i] do 
+	-- pode ter mais de um <wsdl:part> na mesma mensagem 
+		message[i].tag = "wsdl:part"
+		message[i].name = assert (elem[i].name , method_name.."Message part MUST have a name!")
+		if elem[i].element then
+			message[i].attr[1].element = elem[i].element
+		elseif elem.type then
+			message[i].attr[1].type = elem[i].type
+		else
+			error ("Incomplete description: "..method_name.." in "..elem[i].name.." parameters MUST have an 'element' or a 'type' attribute")
+		end
+	-- pode ter os atributos type E element no mesmo <wsdl:part ...> ???
+	-- acho que não, já que o  element se refere a um element em type e o type a um simpletype ou complex type
 	end
-	return soap.serialize (tmpl)
+	return soap.serialize (message)
 end
 
 ------------------------------------------------------------------------------
@@ -152,13 +160,152 @@ end
 
 function M:gen_messages ()
 	local m = {}
-	for name, desc in pairs (self.methods) do
-		local req = assert (desc.request, "Absent 'request' field of method '"..name.."'")
-		m[#m+1] = gen_message (req, "request")
-		local res = assert (desc.response, "Absent 'response' field of method '"..name.."'")
-		m[#m+1] = gen_message (res, "response")
+	for method_name, desc in pairs (self.methods) do
+		if desc.request then 
+			m[#m+1] = gen_message (desc.request, method_name )
+		end		
+		if desc.response then 
+			m[#m+1] = gen_message (desc.response, method_name )
+		end		
+		if desc.fault then 
+			m[#m+1] = gen_message (desc.fault, method_name )
+		end		
+		-- Sim, você pode não ter nenhuma mensagem
 	end
 	return tconcat (m)
+end
+
+------------------------------------------------------------------------------
+-- wsdl:portType template
+-- it should be cleaned each time it is used to eliminate old values.
+--TODO Clean it!!!
+
+local tmpl_portType = {
+	tag = "wsdl:portType",
+	attr = { name = "StockQuoteSoap" },
+	{
+		tag = "wsdl:operation",
+		attr = { name = "GetQuote", parameterOrder = "??" },
+		{
+			tag = "wsdl:input",
+			attr = { message = "GetQuoteSoapIn" },
+		},
+		{
+			tag = "wsdl:output",
+			attr = { message = "GetQuoteSoapOut" },
+		},
+	},
+}
+------------------------------------------------------------------------------
+-- generate portType
+
+local function gen_portType (desc, method_name)
+	local portType = {}
+	portType.tag = "wsdl:portType"
+	portType.attr[1].name = assert (desc.portTypeName , method_name.."You MUST have a portTypeName!")
+
+	portType[1].tag = "wsdl:operation"	
+	portType[1].attr[1].name = method_name
+	--TODO parameterOrder??
+
+	local tab = {}
+	if desc.request then
+		tab.tag = "wsdl:input"
+		tab.attr[1].message = ( desc.namespace or "tns:")..desc.request.name 
+		portType[1][ #portType[1] + 1] = tab 
+	end
+	if desc.response then
+		tab.tag = "wsdl:output"
+		tab.attr[1].message = ( desc.namespace or "tns:")..desc.response.name 
+		portType[1][ #portType[1] + 1] = tab 
+	end
+	if desc.fault then
+		tab.tag = "wsdl:fault"
+		tab.attr[1].message = ( desc.namespace or "tns:")..desc.fault.name 
+		portType[1][ #portType[1] + 1] = tab 
+	end
+	--TODO Como alterar a ordem entre input e output para uma operação output->input ???
+
+	return soap.serialize (portType)
+end
+
+------------------------------------------------------------------------------
+-- generate portTypes
+
+function M:gen_portTypes ()
+	local p = {}
+	for method_name, desc in pairs (self.methods) do
+		p[#p+1] = gen_portType (desc, method_name)
+	end
+	return tconcat (p)
+end
+
+------------------------------------------------------------------------------
+--Generate binding
+
+local function gen_binding (desc, method_name)
+	local binding = {} -- TODO Esse nome ta meio ingrato ???
+	binding.tag = "wsdl:binding"
+	binding.attr[1].name = assert (desc.bindingName , method_name.."You MUST have a bindingName!")
+	binding.attr[1].type = ( desc.namespace or "tns:")..desc.portTypeName
+
+	binding[1].tag = "wsdl:operation"	
+	binding[1].attr[1].name = method_name
+
+	local tab = {}
+	if desc.request then
+		tab.tag = "wsdl:input"
+		binding[1][ #binding[1] + 1] = tab 
+	end
+	if desc.response then
+		tab.tag = "wsdl:output"
+		binding[1][ #binding[1] + 1] = tab 
+	end
+	if desc.fault then
+		tab.tag = "wsdl:fault"
+		binding[1][ #binding[1] + 1] = tab 
+	end
+	--TODO Como acrescentar e calcular os SOAP binding ???
+	
+	return soap.serialize (binding)
+end
+
+------------------------------------------------------------------------------
+--Generate bindings
+
+function M:gen_bindings ()
+	local b = {}
+	for method_name, desc in pairs (self.methods) do
+		b[#b+1] = gen_binding (desc, method_name)
+	end
+	return tconcat (b)
+	
+
+end
+
+------------------------------------------------------------------------------
+--Generate port
+
+local function gen_port (desc, method_name)
+	local port = {}
+	port.tag = "wsdl:port"
+	port.attr[1].name = bindingName
+	port.attr[1].binding = (desc.namespace or "tns:")..bindingName
+	--Como calcular o que acrecentar dentro do port ???
+	return port
+end
+
+------------------------------------------------------------------------------
+--Generate service
+
+function M:gen_service ()
+	local service = {} 
+	service.tag = "wsdl:service"
+	service.attr[1].name = self.name
+	for method_name, desc in pairs (self.methods) do
+		service[#service+1] = gen_port (desc, method_name)
+	end
+	return soap.serialize (service)
 end
 
 ------------------------------------------------------------------------------

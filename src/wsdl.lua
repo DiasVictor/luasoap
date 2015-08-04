@@ -135,16 +135,20 @@ local tmpl = {
 local function gen_message (elem, method_name)
 	local message = {}	
 	message.tag = "wsdl:message"
-	message.attr[1].name = assert (elem.name , method_name.."Message MUST have a name!")
+	message.attr = {}
+	message.attr.name = assert (elem.name , method_name.."Message MUST have a name!")
 		
-	while elem[i] do 
+	for i=1, #elem do 
 	-- pode ter mais de um <wsdl:part> na mesma mensagem 
+		message[i] = {}
 		message[i].tag = "wsdl:part"
 		message[i].name = assert (elem[i].name , method_name.."Message part MUST have a name!")
 		if elem[i].element then
-			message[i].attr[1].element = elem[i].element
-		elseif elem.type then
-			message[i].attr[1].type = elem[i].type
+			message[i].attr = {}
+			message[i].attr.element = elem[i].element
+		elseif elem[i].type then
+			message[i].attr = {}
+			message[i].attr.type = elem[i].type
 		else
 			error ("Incomplete description: "..method_name.." in "..elem[i].name.." parameters MUST have an 'element' or a 'type' attribute")
 		end
@@ -202,26 +206,30 @@ local tmpl_portType = {
 local function gen_portType (desc, method_name)
 	local portType = {}
 	portType.tag = "wsdl:portType"
-	portType.attr[1].name = assert (desc.portTypeName , method_name.."You MUST have a portTypeName!")
+	portType.attr = {}
+	portType.attr.name = assert (desc.portTypeName , method_name.."You MUST have a portTypeName!")
 
+	portType[1] = {}
 	portType[1].tag = "wsdl:operation"	
-	portType[1].attr[1].name = method_name
+	portType[1].attr.name = method_name
 	--TODO parameterOrder??
 
 	local tab = {}
 	if desc.request then
 		tab.tag = "wsdl:input"
-		tab.attr[1].message = ( desc.namespace or "tns:")..desc.request.name 
+		tab.attr = {}
+		tab.attr.message = (desc.namespace or "tns:")..desc.request.name 
 		portType[1][ #portType[1] + 1] = tab 
 	end
 	if desc.response then
 		tab.tag = "wsdl:output"
-		tab.attr[1].message = ( desc.namespace or "tns:")..desc.response.name 
+		tab.attr = {}
+		tab.attr.message = (desc.namespace or "tns:")..desc.response.name 
 		portType[1][ #portType[1] + 1] = tab 
 	end
 	if desc.fault then
 		tab.tag = "wsdl:fault"
-		tab.attr[1].message = ( desc.namespace or "tns:")..desc.fault.name 
+		tab.attr.message = (desc.namespace or "tns:")..desc.fault.name 
 		portType[1][ #portType[1] + 1] = tab 
 	end
 	--TODO Como alterar a ordem entre input e output para uma operação output->input ???
@@ -246,11 +254,14 @@ end
 local function gen_binding (desc, method_name)
 	local binding = {} -- TODO Esse nome ta meio ingrato ???
 	binding.tag = "wsdl:binding"
-	binding.attr[1].name = assert (desc.bindingName , method_name.."You MUST have a bindingName!")
-	binding.attr[1].type = ( desc.namespace or "tns:")..desc.portTypeName
+	binding.attr = {}
+	binding.attr.name = assert (desc.bindingName , method_name.."You MUST have a bindingName!")
+	binding.attr.type = ( desc.namespace or "tns:")..desc.portTypeName
 
+	binding[1] = {}
 	binding[1].tag = "wsdl:operation"	
-	binding[1].attr[1].name = method_name
+	binding[1].attr = {}
+	binding[1].attr.name = method_name
 
 	local tab = {}
 	if desc.request then
@@ -289,8 +300,9 @@ end
 local function gen_port (desc, method_name)
 	local port = {}
 	port.tag = "wsdl:port"
-	port.attr[1].name = bindingName
-	port.attr[1].binding = (desc.namespace or "tns:")..bindingName
+	port.attr = {}
+	port.attr.name = bindingName
+	port.attr.binding = (desc.namespace or "tns:")..bindingName
 	--Como calcular o que acrecentar dentro do port ???
 	return port
 end
@@ -301,7 +313,8 @@ end
 function M:gen_service ()
 	local service = {} 
 	service.tag = "wsdl:service"
-	service.attr[1].name = self.name
+	service.attr = {}
+	service.attr.name = self.name
 	for method_name, desc in pairs (self.methods) do
 		service[#service+1] = gen_port (desc, method_name)
 	end

@@ -95,6 +95,7 @@ function M:export(desc)
 			entries = res,
 		}
 	end
+	assert(desc.name, "A method must have a name!")
 	self.methods[desc.name] = desc
 end
 

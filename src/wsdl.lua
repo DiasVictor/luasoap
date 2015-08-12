@@ -93,7 +93,7 @@ function M:gen_definitions ()
 <wsdl:definitions
 	xmlns:http="http://schemas.xmlsoap.org/wsdl/http/"
 	xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
-	xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/"
+	xmlns:wsoap12="http://schemas.xmlsoap.org/wsdl/soap12/"
 	xmlns:s="http://www.w3.org/2001/XMLSchema"
 	xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
 	xmlns:tns="%s"
@@ -133,21 +133,24 @@ local tmpl = {
 -- @return String with a <wsdl:message>.
 
 local function gen_message (elem, method_name)
-	local message = {}	
-	message.tag = "wsdl:message"
-	message.attr = {}
-	message.attr.name = assert (elem.name , method_name.."Message MUST have a name!")
+	local message = {	
+		tag = "wsdl:message",
+		attr = {
+			name = assert (elem.name , method_name.."Message MUST have a name!"),
+		},
+	}
 		
 	for i=1, #elem do 
 	-- pode ter mais de um <wsdl:part> na mesma mensagem 
-		message[i] = {}
-		message[i].tag = "wsdl:part"
-		message[i].name = assert (elem[i].name , method_name.."Message part MUST have a name!")
+		message[i] = {
+			tag = "wsdl:part",
+			attr = {
+				name = assert (elem[i].name , method_name.."Message part MUST have a name!"),
+			},
+		}
 		if elem[i].element then
-			message[i].attr = {}
 			message[i].attr.element = elem[i].element
 		elseif elem[i].type then
-			message[i].attr = {}
 			message[i].attr.type = elem[i].type
 		else
 			error ("Incomplete description: "..method_name.." in "..elem[i].name.." parameters MUST have an 'element' or a 'type' attribute")
@@ -204,35 +207,41 @@ local tmpl_portType = {
 -- generate portType
 
 local function gen_portType (desc, method_name)
-	local portType = {}
-	portType.tag = "wsdl:portType"
-	portType.attr = {}
-	portType.attr.name = assert (desc.portTypeName , method_name.."You MUST have a portTypeName!")
+	local portType = {
+		tag = "wsdl:portType",
+		attr = {
+			name = assert (desc.portTypeName , method_name.." You MUST have a portTypeName!"),
+		},
+	}
 
-	portType[1] = {}
-	portType[1].tag = "wsdl:operation"	
-	portType[1].attr.name = method_name
-	--TODO parameterOrder??
+	portType[1] = {
+		tag = "wsdl:operation",
+		attr = {
+			name = method_name,
+			--[parameterOrder], why would you need that in Lua?!
+		},
+	}
 
-	local tab = {}
 	if desc.request then
+		local tab = {}
 		tab.tag = "wsdl:input"
 		tab.attr = {}
 		tab.attr.message = (desc.namespace or "tns:")..desc.request.name 
 		portType[1][ #portType[1] + 1] = tab 
 	end
 	if desc.response then
+		local tab = {}
 		tab.tag = "wsdl:output"
 		tab.attr = {}
 		tab.attr.message = (desc.namespace or "tns:")..desc.response.name 
 		portType[1][ #portType[1] + 1] = tab 
 	end
 	if desc.fault then
+		local tab = {}
 		tab.tag = "wsdl:fault"
 		tab.attr.message = (desc.namespace or "tns:")..desc.fault.name 
 		portType[1][ #portType[1] + 1] = tab 
 	end
-	--TODO Como alterar a ordem entre input e output para uma operação output->input ???
 
 	return soap.serialize (portType)
 end
@@ -249,32 +258,87 @@ function M:gen_portTypes ()
 end
 
 ------------------------------------------------------------------------------
+local binding_tags = {
+	[1.1] = "soap:binding",
+	["1.1"] = "soap:binding",
+	[1.2] = "wsoap12:binding",
+	["1.2"] = "wsoap12:binding",
+	["GET"] = "http:binding",
+	["POST"] = "http:binding",
+}
+local function gen_binding_mode (mode, desc)
+	local attr = {
+		transport = "http://schemas.xmlsoap.org/soap/http", -- Other URI maybe used
+		style = "document" or "rpc", --TODO
+	}
+
+	return {
+		tag = binding_tags[mode],
+		attr = {
+		},
+	}
+end
+------------------------------------------------------------------------------
 --Generate binding
 
-local function gen_binding (desc, method_name)
-	local binding = {} -- TODO Esse nome ta meio ingrato ???
-	binding.tag = "wsdl:binding"
-	binding.attr = {}
-	binding.attr.name = assert (desc.bindingName , method_name.."You MUST have a bindingName!")
-	binding.attr.type = ( desc.namespace or "tns:")..desc.portTypeName
+local function gen_binding (desc, method_name, mode)
+	local binding = {
+		tag = "wsdl:binding",
+		attr = {
+			name = assert (desc.bindingName , method_name.."You MUST have a bindingName!"),
+			type = ( desc.namespace or "tns:")..desc.portTypeName,
+		},
+		[1] = gen_binding_mode(mode, desc)
+	}
+	local i = 0
 
-	binding[1] = {}
-	binding[1].tag = "wsdl:operation"	
-	binding[1].attr = {}
-	binding[1].attr.name = method_name
+	--TODO call mode
 
-	local tab = {}
+	i = i+1
+	binding[i] = {
+		tag = "wsdl:operation"	
+		attr = { name = method_name },
+	}
+
 	if desc.request then
+		local tab = {}
 		tab.tag = "wsdl:input"
-		binding[1][ #binding[1] + 1] = tab 
+		if desc.soap and tonumber(desc.soap) == 1.1 then 
+			tab[1] = {}
+			tab[1].tag = "soap:body"
+			tab[1].attr = {}
+			tab[1].attr.use = "literal" or "encoded" --TODO
+		elseif desc.soap and tonumber(desc.soap) == 1.2 then 
+			tab[1] = {}
+			tab[1].tag = "wsoap12:body"
+			tab[1].attr = {}
+			tab[1].attr.use = "literal" or "encoded" --TODO
+		end
+		--TODO Calcular o meio
+		binding[#binding][ #binding[#binding] +1] = tab 
 	end
 	if desc.response then
+		local tab = {}
 		tab.tag = "wsdl:output"
-		binding[1][ #binding[1] + 1] = tab 
+		if desc.soap and tonumber(desc.soap) == 1.1 then 
+			tab[1] = {}
+			tab[1].tag = "soap:body"
+			tab[1].attr = {}
+			tab[1].attr.use = "literal" or "encoded" --TODO
+		elseif desc.soap and tonumber(desc.soap) == 1.2 then 
+			tab[1] = {}
+			tab[1].tag = "wsoap12:body"
+			tab[1].attr = {}
+			tab[1].attr.use = "literal" or "encoded" --TODO
+		end
+		--TODO Calcular o meio
+		binding[#binding][ #binding[#binding] +1] = tab 
 	end
 	if desc.fault then
+		local tab = {}
 		tab.tag = "wsdl:fault"
-		binding[1][ #binding[1] + 1] = tab 
+		--TODO Calcular o meio
+		binding[#binding][ #binding[#binding] +1] = tab 
 	end
 	--TODO Como acrescentar e calcular os SOAP binding ???
 	
@@ -298,12 +362,14 @@ end
 --Generate port
 
 local function gen_port (desc, method_name)
-	local port = {}
-	port.tag = "wsdl:port"
-	port.attr = {}
-	port.attr.name = bindingName
-	port.attr.binding = (desc.namespace or "tns:")..bindingName
-	--Como calcular o que acrecentar dentro do port ???
+	local port = {
+		tag = "wsdl:port",
+		attr = {
+			name = bindingName,
+			binding = (desc.namespace or "tns:")..desc.bindingName,
+		},
+	}
+	--TODO Como calcular o que acrecentar dentro do port ???  "tem SOAP alguma coisa"
 	return port
 end
 
@@ -311,10 +377,12 @@ end
 --Generate service
 
 function M:gen_service ()
-	local service = {} 
-	service.tag = "wsdl:service"
-	service.attr = {}
-	service.attr.name = self.name
+	local service = { 
+		tag = "wsdl:service",
+		attr = {
+			name = self.name,
+		},
+	}
 	for method_name, desc in pairs (self.methods) do
 		service[#service+1] = gen_port (desc, method_name)
 	end

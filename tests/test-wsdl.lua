@@ -16,6 +16,7 @@ local server = require"soap.server".new {
    name = "StockQuote",
    targetNamespace = namespace,
    url = namespace.."stockquote.asmx",
+	mode = { 1.2, '1.1', },
 }
 server:export {
    --name = "nome_do_metodo", -- vai ser a chave da tabela self.methods
@@ -26,6 +27,7 @@ server:export {
    -- como descrever as mensagens que podem ser usadas para a comunicação com o servidor?
 	name = "GetQuote",
 	method = function (...) --[[...]] end,
+	namespace = "tns:",
 	request = {
 		name = "GetQuoteSoapIn",
 		{ name = "parameters", element = "tns:GetQuote" },
@@ -34,14 +36,12 @@ server:export {
 		name = "GetQuoteSoapOut",
 		{ name = "parameters", element = "tns:GetQuoteResponse" },
 	},
+	fault = {
+		name = "GetQuoteSoapFault",
+		{ name = "parameters", element = "tns:GetQuoteFault" },
+	},
 	portTypeName = "StockQuoteSoap",
 	bindingName = "StockQuoteSoap",
-	soapDetails = {
-		binding = {
-		},
-		service = {
-		},
-	}
 
 }
 server:handle_request (nil, "wsdl") --nil é o POST data

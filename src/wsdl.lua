@@ -1,4 +1,4 @@
----------------------------'---------------------------------------------------
+------------------------------------------------------------------------------
 -- LuaSOAP support to WSDL semi-automatic generation.
 -- See Copyright Notice in license.html
 ------------------------------------------------------------------------------
@@ -88,6 +88,7 @@ methods = {
 --]=]
 
 ------------------------------------------------------------------------------
+------------------------------------------------------------------------------
 function M:gen_definitions ()
 	return strformat([[
 <wsdl:definitions
@@ -104,6 +105,7 @@ function M:gen_definitions ()
 end
 
 ------------------------------------------------------------------------------
+------------------------------------------------------------------------------
 function M:gen_types ()
 	if self.types then
 		self.types.tag = "wsdl:types"
@@ -113,20 +115,9 @@ function M:gen_types ()
 	end
 end
 
---=---------------------------------------------------------------------------
--- wsdl:message template
--- it should be cleaned each time it is used to eliminate old values.
---TODO Clean it 
-local tmpl = {
-	tag = "wsdl:message",
-	attr = { name = "to be cleaned and refilled" },
-	{
-		tag = "wsdl:part",
-		attr = { name = "parameters", type = nil, element = nil, },
-	},
-}
-
---=---------------------------------------------------------------------------
+-----------------------------------------------------------------------------
+-----------------------------------------------------------------------------
+-- Generate messeges
 -- generate one <wsdl:message> element with two <wsdl:part> elements inside it.
 -- @param elem Table with message description.
 -- @param name String with type of message ("request" or "response").
@@ -136,7 +127,7 @@ local function gen_message (elem, method_name)
 	local message = {	
 		tag = "wsdl:message",
 		attr = {
-			name = assert (elem.name , method_name.."Message MUST have a name!"),
+			name = assert (elem.name , method_name.." Message MUST have a name!"),
 		},
 	}
 		
@@ -145,13 +136,13 @@ local function gen_message (elem, method_name)
 		message[i] = {
 			tag = "wsdl:part",
 			attr = {
-				name = assert (elem[i].name , method_name.."Message part MUST have a name!"),
+				name = assert (elem[i].name , method_name.." Message part MUST have a name!"),
 			},
 		}
 		if elem[i].element then
-			message[i].attr.element = elem[i].element
+			message[i].attr.element = assert (elem[i].element:match"^%a+%:%a+$", method_name.." Element must be qualified '"..elem[i].element.."'")
 		elseif elem[i].type then
-			message[i].attr.type = elem[i].type
+			message[i].attr.type =  assert (elem[i].type:match"^%a+%:%a+$", method_name.." Type must be qualified '"..elem[i].type.."'")
 		else
 			error ("Incomplete description: "..method_name.." in "..elem[i].name.." parameters MUST have an 'element' or a 'type' attribute")
 		end
@@ -183,26 +174,6 @@ function M:gen_messages ()
 end
 
 ------------------------------------------------------------------------------
--- wsdl:portType template
--- it should be cleaned each time it is used to eliminate old values.
---TODO Clean it!!!
-
-local tmpl_portType = {
-	tag = "wsdl:portType",
-	attr = { name = "StockQuoteSoap" },
-	{
-		tag = "wsdl:operation",
-		attr = { name = "GetQuote", parameterOrder = "??" },
-		{
-			tag = "wsdl:input",
-			attr = { message = "GetQuoteSoapIn" },
-		},
-		{
-			tag = "wsdl:output",
-			attr = { message = "GetQuoteSoapOut" },
-		},
-	},
-}
 ------------------------------------------------------------------------------
 -- generate portType
 
@@ -223,24 +194,25 @@ local function gen_portType (desc, method_name)
 	}
 
 	if desc.request then
-		local tab = {}
-		tab.tag = "wsdl:input"
-		tab.attr = {}
-		tab.attr.message = (desc.namespace or "tns:")..desc.request.name 
-		portType[1][ #portType[1] + 1] = tab 
+		portType[1][ #portType[1] + 1] = {
+						tag = "wsdl:input",
+						attr = { message = (desc.namespace or "tns:")..desc.request.name },
+						}	
 	end
 	if desc.response then
-		local tab = {}
-		tab.tag = "wsdl:output"
-		tab.attr = {}
-		tab.attr.message = (desc.namespace or "tns:")..desc.response.name 
-		portType[1][ #portType[1] + 1] = tab 
+		portType[1][ #portType[1] + 1] = {
+						tag = "wsdl:output",
+						attr = { message =  (desc.namespace or "tns:")..desc.response.name }, 
+						}
 	end
 	if desc.fault then
-		local tab = {}
-		tab.tag = "wsdl:fault"
-		tab.attr.message = (desc.namespace or "tns:")..desc.fault.name 
-		portType[1][ #portType[1] + 1] = tab 
+		portType[1][ #portType[1] + 1] = {
+						tag = "wsdl:fault",
+						attr = { 
+							name = desc.fault.name,
+							message = (desc.namespace or "tns:")..desc.fault.name,
+							},
+						}
 	end
 
 	return soap.serialize (portType)
@@ -258,26 +230,62 @@ function M:gen_portTypes ()
 end
 
 ------------------------------------------------------------------------------
-local binding_tags = {
-	[1.1] = "soap:binding",
-	["1.1"] = "soap:binding",
-	[1.2] = "wsoap12:binding",
-	["1.2"] = "wsoap12:binding",
-	["GET"] = "http:binding",
-	["POST"] = "http:binding",
+------------------------------------------------------------------------------
+local soap_attr = {
+	transport = "http://schemas.xmlsoap.org/soap/http", -- Other URI may be used
+	style = "document", --TODO "rpc"
 }
-local function gen_binding_mode (mode, desc)
-	local attr = {
-		transport = "http://schemas.xmlsoap.org/soap/http", -- Other URI maybe used
-		style = "document" or "rpc", --TODO
-	}
 
-	return {
-		tag = binding_tags[mode],
-		attr = {
-		},
-	}
+local get_attr = {
+	verb = "GET",
+}
+
+local post_attr = {
+	verb = "POST",
+}
+
+local binding_tags = {
+	[1.1] = { tag = "soap:binding", attr = soap_attr, },
+	["1.1"] = { tag = "soap:binding", attr = soap_attr, },
+	[1.2] = { tag = "wsoap12:binding", attr = soap_attr, },
+	["1.2"] = { tag = "wsoap12:binding", attr = soap_attr, },
+	--["GET"] = { tag = "http:binding", attr = get_attr, },
+	--["POST"] = { tag = "http:binding", attr = post_attr, },
+}
+
+local function gen_binding_mode (mode, desc)
+	return binding_tags[mode]
 end
+
+------------------------------------------------------------------------------
+local operation_tags = {
+	[1.1] = { tag = "soap:body", attr = { use = "literal" }, },
+	["1.1"] = { tag = "soap:body", attr = { use = "literal" }, },
+	[1.2] = { tag = "wsoap12:body", attr = { use = "literal" }, },
+	["1.2"] = { tag = "wsoap12:body", attr = { use = "literal" }, },
+	--["GET"] = { tag = "http:binding", attr = {}, },
+	--["POST"] = { tag = "http:binding", attr = {}, },
+}
+
+local function gen_binding_op (mode, desc)
+	return operation_tags[mode]
+end
+
+------------------------------------------------------------------------------
+local operation_fault_tags = {
+	[1.1] = { tag = "soap:body", attr = { name = "To be filled", use = "literal" }, },
+	["1.1"] = { tag = "soap:body", attr = { name = "To be filled", use = "literal" }, },
+	[1.2] = { tag = "wsoap12:body", attr = { name = "To be filled", use = "literal" }, },
+	["1.2"] = { tag = "wsoap12:body", attr = { name = "To be filled", use = "literal" }, },
+	--["GET"] = { tag = "http:binding", attr = {}, },
+	--["POST"] = { tag = "http:binding", attr = {}, },
+}
+
+local function gen_binding_op_fault (mode, desc)
+	operation_fault_tags[mode].attr.name = desc.fault.name
+	return operation_fault_tags[mode]
+end
+
 ------------------------------------------------------------------------------
 --Generate binding
 
@@ -285,62 +293,34 @@ local function gen_binding (desc, method_name, mode)
 	local binding = {
 		tag = "wsdl:binding",
 		attr = {
-			name = assert (desc.bindingName , method_name.."You MUST have a bindingName!"),
+			name = assert (desc.bindingName..tostring(mode) , method_name.."You MUST have a bindingName!"),
+			--TODO Melhorar bindingName
 			type = ( desc.namespace or "tns:")..desc.portTypeName,
 		},
 		[1] = gen_binding_mode(mode, desc)
 	}
-	local i = 0
 
-	--TODO call mode
-
-	i = i+1
-	binding[i] = {
-		tag = "wsdl:operation"	
+	binding[2] = {
+		tag = "wsdl:operation",
 		attr = { name = method_name },
+		--TODO mode operation
 	}
 
 	if desc.request then
-		local tab = {}
-		tab.tag = "wsdl:input"
-		if desc.soap and tonumber(desc.soap) == 1.1 then 
-			tab[1] = {}
-			tab[1].tag = "soap:body"
-			tab[1].attr = {}
-			tab[1].attr.use = "literal" or "encoded" --TODO
-		elseif desc.soap and tonumber(desc.soap) == 1.2 then 
-			tab[1] = {}
-			tab[1].tag = "wsoap12:body"
-			tab[1].attr = {}
-			tab[1].attr.use = "literal" or "encoded" --TODO
-		end
-		--TODO Calcular o meio
-		binding[#binding][ #binding[#binding] +1] = tab 
-	end
+		binding[2][ #binding[2] +1] = { tag = "wsdl:input",
+						[1] = gen_binding_op (mode, desc),
+						}
+end
 	if desc.response then
-		local tab = {}
-		tab.tag = "wsdl:output"
-		if desc.soap and tonumber(desc.soap) == 1.1 then 
-			tab[1] = {}
-			tab[1].tag = "soap:body"
-			tab[1].attr = {}
-			tab[1].attr.use = "literal" or "encoded" --TODO
-		elseif desc.soap and tonumber(desc.soap) == 1.2 then 
-			tab[1] = {}
-			tab[1].tag = "wsoap12:body"
-			tab[1].attr = {}
-			tab[1].attr.use = "literal" or "encoded" --TODO
-		end
-		--TODO Calcular o meio
-		binding[#binding][ #binding[#binding] +1] = tab 
-	end
+		binding[2][ #binding[2] +1] = { tag = "wsdl:output",
+						[1] = gen_binding_op (mode, desc),
+						}
+end
 	if desc.fault then
-		local tab = {}
-		tab.tag = "wsdl:fault"
-		--TODO Calcular o meio
-		binding[#binding][ #binding[#binding] +1] = tab 
+		binding[2][ #binding[2] +1] = { tag = "wsdl:fault",
+						[1] = gen_binding_op_fault (mode, desc),
+						}
 	end
-	--TODO Como acrescentar e calcular os SOAP binding ???
 	
 	return soap.serialize (binding)
 end
@@ -350,8 +330,16 @@ end
 
 function M:gen_bindings ()
 	local b = {}
-	for method_name, desc in pairs (self.methods) do
-		b[#b+1] = gen_binding (desc, method_name)
+	if type(self.mode) == "table" then
+		for _, mode in ipairs(self.mode) do
+			for method_name, desc in pairs (self.methods) do
+				b[#b+1] = gen_binding (desc, method_name, mode)
+			end
+		end
+	else
+		for method_name, desc in pairs (self.methods) do
+			b[#b+1] = gen_binding (desc, method_name, self.mode)
+		end
 	end
 	return tconcat (b)
 	
@@ -359,17 +347,31 @@ function M:gen_bindings ()
 end
 
 ------------------------------------------------------------------------------
+------------------------------------------------------------------------------
 --Generate port
 
-local function gen_port (desc, method_name)
+local address_tags = {
+	[1.1] = "soap:address",
+	["1.1"] = "soap:address",
+	[1.2] = "wsoap12:address",
+	["1.2"] = "wsoap12:address",
+	--["GET"] = "http:address",
+	--["POST"] = "http:address",
+}
+
+local function gen_port (desc, url, mode)
 	local port = {
 		tag = "wsdl:port",
 		attr = {
-			name = bindingName,
-			binding = (desc.namespace or "tns:")..desc.bindingName,
+			name = desc.bindingName..tostring(mode),
+			--TODO Melhorar bindingName
+			binding = (desc.namespace or "tns:")..desc.bindingName..tostring(mode),
+		},
+		[1] = {
+			tag = address_tags[mode],
+			attr = { location = url },
 		},
 	}
-	--TODO Como calcular o que acrecentar dentro do port ???  "tem SOAP alguma coisa"
 	return port
 end
 
@@ -383,12 +385,21 @@ function M:gen_service ()
 			name = self.name,
 		},
 	}
-	for method_name, desc in pairs (self.methods) do
-		service[#service+1] = gen_port (desc, method_name)
+	if type(self.mode) == "table" then
+		for _, mode in ipairs(self.mode) do
+			for method_name, desc in pairs (self.methods) do
+				service[#service+1] = gen_port (desc, self.url, mode)
+			end
+		end
+	else
+		for method_name, desc in pairs (self.methods) do
+			service[#service+1] = gen_port (desc, self.url, self.mode)
+		end
 	end
 	return soap.serialize (service)
 end
 
+------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 function M:generate_wsdl ()
 	if self.wsdl then

@@ -19,6 +19,7 @@ local M = {
 	_VERSION = "LuaSOAP 4.0 service helping functions",
 
 	encoding = "utf-8", -- default encoding
+	mode = 1.2, -- default mode
 }
 M.__index = M
 

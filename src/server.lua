@@ -153,6 +153,7 @@ function M.new (server)
 		)
     end
 	server.methods = {}
+	server.types = server.types or {}
 	return setmetatable (server, M)
 end
 

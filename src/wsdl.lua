@@ -6,6 +6,7 @@
 local soap = require"soap"
 local strformat = require"string".format
 local tconcat = require"table".concat
+local qname_patt = "^%g*%:%g*$"
 
 local M = {
 	_COPYRIGHT = "Copyright (C) 2015 Kepler Project",
@@ -100,7 +101,7 @@ function M:gen_definitions ()
 	xmlns:tns="%s"
 	xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/"
 	targetNamespace="%s"
-	xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/ %s">]],
+	xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" %s>]],
 	self.targetNamespace, self.targetNamespace, soap.attrs (self.otherNamespaces))
 end
 
@@ -108,17 +109,31 @@ end
 ------------------------------------------------------------------------------
 function M:gen_types ()
 	if self.types then
-		self.types.tag = "wsdl:types"
-		return soap.serialize (self.types)
-	else
-		return ''
+		local all_types = {
+			tag = "wsdl:types",
+		}
+
+		all_types[1] = {
+			tag = "s:schema",
+			attr = {
+				--TODO sempre qualified ??? Como prever?
+				elementFormDefault = "qualified",
+				targetNamespace = self.targetNamespace,
+			},
+		}
+		for _ , elem in ipairs (self.types) do
+			all_types[1][ #all_types[1] + 1] = elem
+		end
+		return soap.serialize (all_types)
 	end
+
+	return ''
 end
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
 -- Generate messeges
--- generate one <wsdl:message> element with two <wsdl:part> elements inside it.
+-- generate one <wsdl:message> element with N <wsdl:part> elements inside it.
 -- @param elem Table with message description.
 -- @param name String with type of message ("request" or "response").
 -- @return String with a <wsdl:message>.
@@ -140,9 +155,9 @@ local function gen_message (elem, method_name)
 			},
 		}
 		if elem[i].element then
-			message[i].attr.element = assert (elem[i].element:match"^%a+%:%a+$", method_name.." Element must be qualified '"..elem[i].element.."'")
+			message[i].attr.element = assert (elem[i].element:match(qname_patt), method_name.." Element must be qualified '"..elem[i].element.."'")
 		elseif elem[i].type then
-			message[i].attr.type =  assert (elem[i].type:match"^%a+%:%a+$", method_name.." Type must be qualified '"..elem[i].type.."'")
+			message[i].attr.type =  assert (elem[i].type:match(qname_patt), method_name.." Type must be qualified '"..elem[i].type.."'")
 		else
 			error ("Incomplete description: "..method_name.." in "..elem[i].name.." parameters MUST have an 'element' or a 'type' attribute")
 		end
@@ -259,6 +274,21 @@ end
 
 ------------------------------------------------------------------------------
 local operation_tags = {
+	[1.1] = { tag = "soap:operation", attr = { soapAction = "To be filled", style = "document"}, }, --TODO "rpc"
+	["1.1"] = { tag = "soap:operation", attr = { soapAction = "To be filled", style = "document"}, },
+	[1.2] = { tag = "wsoap12:operation", attr = { soapAction = "To be filled", style = "document"}, },
+	["1.2"] = { tag = "wsoap12:operation", attr = { soapAction = "To be filled", style = "document"}, },
+	--["GET"] = { tag = "http:operation", attr = {}, },
+	--["POST"] = { tag = "http:operation", attr = {}, },
+}
+
+local function gen_binding_operation (mode, url)
+	operation_tags[mode].attr.soapAction = url
+	return operation_tags[mode]
+end
+
+------------------------------------------------------------------------------
+local body_tags = {
 	[1.1] = { tag = "soap:body", attr = { use = "literal" }, },
 	["1.1"] = { tag = "soap:body", attr = { use = "literal" }, },
 	[1.2] = { tag = "wsoap12:body", attr = { use = "literal" }, },
@@ -267,12 +297,12 @@ local operation_tags = {
 	--["POST"] = { tag = "http:binding", attr = {}, },
 }
 
-local function gen_binding_op (mode, desc)
-	return operation_tags[mode]
+local function gen_binding_op_body (mode, desc)
+	return body_tags[mode]
 end
 
 ------------------------------------------------------------------------------
-local operation_fault_tags = {
+local body_fault_tags = {
 	[1.1] = { tag = "soap:body", attr = { name = "To be filled", use = "literal" }, },
 	["1.1"] = { tag = "soap:body", attr = { name = "To be filled", use = "literal" }, },
 	[1.2] = { tag = "wsoap12:body", attr = { name = "To be filled", use = "literal" }, },
@@ -281,15 +311,15 @@ local operation_fault_tags = {
 	--["POST"] = { tag = "http:binding", attr = {}, },
 }
 
-local function gen_binding_op_fault (mode, desc)
-	operation_fault_tags[mode].attr.name = desc.fault.name
-	return operation_fault_tags[mode]
+local function gen_binding_op_body_fault (mode, desc)
+	body_fault_tags[mode].attr.name = desc.fault.name
+	return body_fault_tags[mode]
 end
 
 ------------------------------------------------------------------------------
 --Generate binding
 
-local function gen_binding (desc, method_name, mode)
+local function gen_binding (desc, method_name, url, mode)
 	local binding = {
 		tag = "wsdl:binding",
 		attr = {
@@ -303,22 +333,23 @@ local function gen_binding (desc, method_name, mode)
 	binding[2] = {
 		tag = "wsdl:operation",
 		attr = { name = method_name },
-		--TODO mode operation
+		[1] =  gen_binding_operation (mode, url)
+		--TODO Qual URL usar??
 	}
 
 	if desc.request then
 		binding[2][ #binding[2] +1] = { tag = "wsdl:input",
-						[1] = gen_binding_op (mode, desc),
+						[1] = gen_binding_op_body (mode, desc),
 						}
 end
 	if desc.response then
 		binding[2][ #binding[2] +1] = { tag = "wsdl:output",
-						[1] = gen_binding_op (mode, desc),
+						[1] = gen_binding_op_body (mode, desc),
 						}
 end
 	if desc.fault then
 		binding[2][ #binding[2] +1] = { tag = "wsdl:fault",
-						[1] = gen_binding_op_fault (mode, desc),
+						[1] = gen_binding_op_body_fault (mode, desc),
 						}
 	end
 	
@@ -333,12 +364,12 @@ function M:gen_bindings ()
 	if type(self.mode) == "table" then
 		for _, mode in ipairs(self.mode) do
 			for method_name, desc in pairs (self.methods) do
-				b[#b+1] = gen_binding (desc, method_name, mode)
+				b[#b+1] = gen_binding (desc, method_name, self.url, mode)
 			end
 		end
 	else
 		for method_name, desc in pairs (self.methods) do
-			b[#b+1] = gen_binding (desc, method_name, self.mode)
+			b[#b+1] = gen_binding (desc, method_name, self.url, self.mode)
 		end
 	end
 	return tconcat (b)

@@ -171,6 +171,7 @@ local xmlns_soap12 = "http://www.w3.org/2003/05/soap-envelope"
 -- @return String with SOAP envelope element.
 ---------------------------------------------------------------------
 local function encode (args)
+	assert (type(args.entries) == "table", "Invalid args: expected table but got "..type(args.entries)..tostring(args.entries))
 	if tonumber(args.soapversion) == 1.2 then
 		envelope_template.attr["xmlns:soap"] = xmlns_soap12
 	else

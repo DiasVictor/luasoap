@@ -55,6 +55,7 @@ end
 ------------------------------------------------------------------------------
 function M:decodedata(doc)
 	local namespace, elem_name, elems = soap.decode(doc)
+	assert(self.methods[elem_name], "Unavailable method: `"..tostring(elem_name).."'")
 	local func = self.methods[elem_name].method
 	assert(type(func) == "function", "Unavailable method: `"..tostring(elem_name).."'")
 
@@ -85,18 +86,30 @@ end
 ------------------------------------------------------------------------------
 -- Exports methods that can be used by the server.
 -- @param desc Table with the method description.
+--	The programmer MUST provide different tables for different methods. 
 ------------------------------------------------------------------------------
 function M:export(desc)
-	local f = desc.method
-	desc.method = function (...) -- ( namespace, unpack(arguments) )
-		local res = f(...)
-		return soap.encode{
-			namespace = self.targetNamespace,
-			method = desc.response.name,
-			entries = res,
-		}
+	if desc.request then
+		desc.request.name = desc.request.name or (desc.name.."SoapIn")
+	end
+	if desc.response then
+		desc.response.name = desc.response.name or (desc.name.."SoapOut")
+		local f = desc.method
+		desc.method = function (...) -- ( namespace, unpack(arguments) )
+			local res = f(...)
+			return soap.encode{
+				namespace = self.targetNamespace,
+				method = desc.response.name,
+				entries = res,
+			}
+		end
+	end
+	if desc.fault then
+		desc.fault.name = desc.fault.name or (desc.name.."SoapFault")
 	end
 	assert(desc.name, "A method must have a name!")
+	desc.portTypeName =  desc.portTypeName or (desc.name.."Soap")
+	desc.bindingName =  desc.bindingName or (desc.name.."Soap")
 	self.methods[desc.name] = desc
 end
 
@@ -106,6 +119,7 @@ end
 -- @param querystring String with the query string.
 ------------------------------------------------------------------------------
 function M:handle_request(postdata, querystring)
+	assert(getmetatable(self) == M, "Invalid argument #1: it must be a soap server (maybe you called this function with a dot (.), not with a colon (:))")
 	cgilua.seterroroutput(self.fatalerrorfunction)
 
 	local namespace, func, arg_table
@@ -114,7 +128,7 @@ function M:handle_request(postdata, querystring)
 		namespace, func, arg_table = self:decodedata(postdata)
 		header = self:xml_header()
 	else
-		if querystring and querystring:lower() == "wsdl" then -- WSDL service
+		if not querystring or querystring=='' or querystring:lower() == "wsdl" then -- WSDL service
 			func = function ()
 				-- import all wsdl functions into server
 				for n, m in pairs(require"soap.wsdl") do

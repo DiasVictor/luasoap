@@ -30,6 +30,7 @@ local M = {
 --			element -- string with type element's name (optional)
 --			type -- string with type (simple or complex) name (optional)
 --	response -- idem
+--	namespace -- string with qualifying namespace (optional)
 --	portTypeName -- string with portType name attribute
 --	bindingName -- string with binding name attribute
 --[=[
@@ -116,7 +117,7 @@ function M:gen_types ()
 		all_types[1] = {
 			tag = "s:schema",
 			attr = {
-				--TODO sempre qualified ??? Como prever?
+				--TODO always qualified ??? 
 				elementFormDefault = "qualified",
 				targetNamespace = self.targetNamespace,
 			},
@@ -135,7 +136,7 @@ end
 -- Generate messeges
 -- generate one <wsdl:message> element with N <wsdl:part> elements inside it.
 -- @param elem Table with message description.
--- @param name String with type of message ("request" or "response").
+-- @param name String with type of message ("request" or "response" or "fault").
 -- @return String with a <wsdl:message>.
 
 local function gen_message (elem, method_name)
@@ -147,7 +148,6 @@ local function gen_message (elem, method_name)
 	}
 		
 	for i=1, #elem do 
-	-- pode ter mais de um <wsdl:part> na mesma mensagem 
 		message[i] = {
 			tag = "wsdl:part",
 			attr = {
@@ -161,8 +161,6 @@ local function gen_message (elem, method_name)
 		else
 			error ("Incomplete description: "..method_name.." in "..elem[i].name.." parameters MUST have an 'element' or a 'type' attribute")
 		end
-	-- pode ter os atributos type E element no mesmo <wsdl:part ...> ???
-	-- acho que não, já que o  element se refere a um element em type e o type a um simpletype ou complex type
 	end
 	return soap.serialize (message)
 end
@@ -183,7 +181,6 @@ function M:gen_messages ()
 		if desc.fault then 
 			m[#m+1] = gen_message (desc.fault, method_name )
 		end		
-		-- Sim, você pode não ter nenhuma mensagem
 	end
 	return tconcat (m)
 end
@@ -324,7 +321,6 @@ local function gen_binding (desc, method_name, url, mode)
 		tag = "wsdl:binding",
 		attr = {
 			name = assert (desc.bindingName..tostring(mode) , method_name.."You MUST have a bindingName!"),
-			--TODO Melhorar bindingName
 			type = ( desc.namespace or "tns:")..desc.portTypeName,
 		},
 		[1] = gen_binding_mode(mode, desc)
@@ -334,7 +330,6 @@ local function gen_binding (desc, method_name, url, mode)
 		tag = "wsdl:operation",
 		attr = { name = method_name },
 		[1] =  gen_binding_operation (mode, url)
-		--TODO Qual URL usar??
 	}
 
 	if desc.request then
@@ -395,7 +390,6 @@ local function gen_port (desc, url, mode)
 		tag = "wsdl:port",
 		attr = {
 			name = desc.bindingName..tostring(mode),
-			--TODO Melhorar bindingName
 			binding = (desc.namespace or "tns:")..desc.bindingName..tostring(mode),
 		},
 		[1] = {

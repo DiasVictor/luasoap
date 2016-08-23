@@ -1,14 +1,14 @@
 # $Id: Makefile,v 1.13 2009/07/22 19:02:46 tomas Exp $
 #
 
-VERSION=3.0
+VERSION=4.0
 
-LUA_DIR= /usr/local/share/lua/5.1
+LUA_DIR= /usr/local/share/lua/5.2
 INSTALL_DIR= $(LUA_DIR)/soap
 EXTRA_DIR= $(INSTALL_DIR)/client
 
 MAIN_LUA= src/soap.lua 
-LUAS= src/client.lua src/server.lua
+LUAS= src/client.lua src/server.lua src/wsdl.lua
 EXTRA= src/client/https.lua
 
 build clean:

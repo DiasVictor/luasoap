@@ -30,13 +30,14 @@ end
 
 ------------------------------------------------------------------------------
 function M:respond(resp, header)
-	cgilua.header("Content-length", string.len(resp))
+	local full_response = self:xml_header()..resp
+	cgilua.header("Content-length", string.len(full_response))
 	cgilua.header("Connection", "close")
 	cgilua.contentheader("text", "xml")
 	if header then
 		cgilua.put(header)
 	end
-	cgilua.put(resp)
+	cgilua.put(full_response)
 end
 
 ------------------------------------------------------------------------------
@@ -123,10 +124,8 @@ function M:handle_request(postdata, querystring)
 	cgilua.seterroroutput(self.fatalerrorfunction)
 
 	local namespace, func, arg_table
-	local header
 	if postdata then
 		namespace, func, arg_table = self:decodedata(postdata)
-		header = self:xml_header()
 	else
 		if not querystring or querystring=='' or querystring:lower() == "wsdl" then -- WSDL service
 			func = function ()
@@ -145,13 +144,12 @@ function M:handle_request(postdata, querystring)
 --			end
 		else
 --			func = __methods["listMethods"]
---			header = self:xml_header()
 		end
 		arg_table = {}
 	end
 
 	local ok, result = self:callfunc(func, namespace, arg_table)
-	self:respond(result, header)
+	self:respond(result)
 end
 
 ------------------------------------------------------------------------------

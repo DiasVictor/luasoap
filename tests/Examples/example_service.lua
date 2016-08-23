@@ -2,6 +2,88 @@
 ---------------------------------
 
 local server_address = "http://localhost/server/" -- http?
+local aux_types = {
+        { tag = "s:element",
+                attr = { name = "x", },
+                { tag = "s:complexType",
+                        { tag = "s:sequence",
+                                { tag = "s:element",
+                                        attr = {
+                                                minOccurs = "0",
+                                                maxOccurs = "1",
+                                                name = "x",
+                                                type = "s:integer",
+                                        },
+                                },
+
+                        },
+
+                },
+
+        },
+        { tag = "s:element",
+                attr = { name = "date", },
+                { tag = "s:complexType",
+                        { tag = "s:sequence",
+                                { tag = "s:element",
+                                        attr = {
+                                                minOccurs = "1",
+                                                maxOccurs = "1",
+                                                name = "date",
+                                                type = "s:string",
+                                        },
+                                },
+
+                        },
+
+                },
+
+        },
+        { tag = "s:element",
+                attr = { name = "prox", },
+                { tag = "s:complexType",
+                        { tag = "s:sequence",
+                                { tag = "s:element",
+                                        attr = {
+                                                minOccurs = "1",
+                                                maxOccurs = "1",
+                                                name = "prox",
+                                                type = "s:integer",
+                                        },
+                                },
+
+                        },
+
+                },
+
+        },
+        { tag = "s:element",
+                attr = { name = "sincos", },
+                { tag = "s:complexType",
+                        { tag = "s:sequence",
+                                { tag = "s:element",
+                                        attr = {
+                                                minOccurs = "1",
+                                                maxOccurs = "1",
+                                                name = "sin",
+                                                type = "s:double",
+                                        },
+                                },
+				{ tag = "s:element",
+					attr = {
+                                                minOccurs = "1",
+                                                maxOccurs = "1",
+                                                name = "cos",
+                                                type = "s:double",
+                                        },
+                                }
+                        },
+
+                },
+
+        },
+}
+
 
 local server = require"soap.server".new{
     name = "example_service", -- Service Name
@@ -10,8 +92,10 @@ local server = require"soap.server".new{
     url = server_address.."example_service.lua",
 
     mode = { 1.2, 1.1, }, -- opcional: default == { 1.2 }
-    types = nil,
+    types = aux_types,
 }
+
+
 server:export {
     name = "date", -- Method identifier
     method = function (namespace, args) 
@@ -28,14 +112,14 @@ server:export {
 server:export {
     name = "sucessor", -- Method identifier
     method = function (namespace, args)
-		local ant = args[1][1] -- args is a LOM table that comes with the request data
-		if ant then
-			return { { tag = 'prox', ant+1 } }
+		local x = args[1][1] -- args is a LOM table that comes with the request data
+		if x then
+			return { { tag = 'prox', x+1 } }
 		end
 		return { { tag = 'prox', '' } }
 	end,
-    request = { { name = "ant", type = "s:integer", }, },
-    response = { { name = "prox", type = "s:integer", }, },
+    request = { { name = "x", type = "tns:x", }, },
+    response = { { name = "prox", type = "tns:prox", }, },
 }
 
 server:export {
@@ -54,8 +138,8 @@ server:export {
     },
     response = {
         name = nil, -- default == desc.name.."SoapOut"
---     { name = "result", type = "tns:sincos", },
----[=[
+	{ name = "result", type = "tns:sincos", },
+--[=[
         { name = "sin", type = "s:double", },
         { name = "cos", type = "s:double", },
 --]=]
